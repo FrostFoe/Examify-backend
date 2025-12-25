@@ -18,10 +18,16 @@ if ($method === 'GET') {
             $exam['shuffle_questions'] = (bool)$exam['shuffle_questions'];
             $exam['shuffle_sections_only'] = (bool)$exam['shuffle_sections_only'];
             
-            // Fetch question IDs
-            $stmtIds = $pdo->prepare("SELECT question_id FROM exam_questions WHERE exam_id = ? ORDER BY order_index ASC");
-            $stmtIds->execute([$id]);
-            $exam['question_ids'] = $stmtIds->fetchAll(PDO::FETCH_COLUMN);
+            // Fetch questions
+            $stmtQ = $pdo->prepare("SELECT q.*, eq.marks as question_marks FROM questions q JOIN exam_questions eq ON q.id = eq.question_id WHERE eq.exam_id = ? ORDER BY eq.order_index ASC");
+            $stmtQ->execute([$id]);
+            $questions = $stmtQ->fetchAll();
+            
+            // Attach image URLs
+            $questions = array_map('attachImageUrls', $questions);
+            
+            $exam['questions'] = $questions;
+            $exam['question_ids'] = array_column($questions, 'id');
         }
         echo json_encode(['success' => true, 'data' => $exam]);
     } elseif ($accessible_by) {
@@ -84,6 +90,9 @@ if ($method === 'GET') {
     }
 } elseif ($method === 'POST') {
     $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        $input = $_POST;
+    }
     $action = $_GET['action'] ?? '';
 
     if ($action === 'create') {
@@ -96,14 +105,31 @@ if ($method === 'GET') {
         $marks_per_question = $input['marks_per_question'] ?? 1.0;
         $negative_marks_per_wrong = $input['negative_marks_per_wrong'] ?? 0.5;
         $file_id = $input['file_id'] ?? null;
-        $is_practice = ($input['is_practice'] ?? false) ? 1 : 0;
-        $shuffle_questions = ($input['shuffle_questions'] ?? false) ? 1 : 0;
+        
+        $is_practice_val = $input['is_practice'] ?? false;
+        $is_practice = ($is_practice_val === 'true' || $is_practice_val === true || $is_practice_val === 1 || $is_practice_val === '1') ? 1 : 0;
+        
+        $shuffle_val = $input['shuffle_questions'] ?? false;
+        $shuffle_questions = ($shuffle_val === 'true' || $shuffle_val === true || $shuffle_val === 1 || $shuffle_val === '1') ? 1 : 0;
+        
         $start_at = $input['start_at'] ?? null;
         $end_at = $input['end_at'] ?? null;
         $total_subjects = $input['total_subjects'] ?? null;
-        $mandatory_subjects = json_encode($input['mandatory_subjects'] ?? []);
-        $optional_subjects = json_encode($input['optional_subjects'] ?? []);
+        
+        $mandatory_subjects = $input['mandatory_subjects'] ?? [];
+        if (!is_string($mandatory_subjects)) {
+            $mandatory_subjects = json_encode($mandatory_subjects);
+        }
+        
+        $optional_subjects = $input['optional_subjects'] ?? [];
+        if (!is_string($optional_subjects)) {
+            $optional_subjects = json_encode($optional_subjects);
+        }
+        
         $question_ids = $input['question_ids'] ?? [];
+        if (is_string($question_ids)) {
+            $question_ids = json_decode($question_ids, true) ?? [];
+        }
 
         $pdo->beginTransaction();
         try {
@@ -145,14 +171,31 @@ if ($method === 'GET') {
         $marks_per_question = $input['marks_per_question'] ?? 1.0;
         $negative_marks_per_wrong = $input['negative_marks_per_wrong'] ?? 0.5;
         $file_id = $input['file_id'] ?? null;
-        $is_practice = ($input['is_practice'] ?? false) ? 1 : 0;
-        $shuffle_questions = ($input['shuffle_questions'] ?? false) ? 1 : 0;
+        
+        $is_practice_val = $input['is_practice'] ?? false;
+        $is_practice = ($is_practice_val === 'true' || $is_practice_val === true || $is_practice_val === 1 || $is_practice_val === '1') ? 1 : 0;
+        
+        $shuffle_val = $input['shuffle_questions'] ?? false;
+        $shuffle_questions = ($shuffle_val === 'true' || $shuffle_val === true || $shuffle_val === 1 || $shuffle_val === '1') ? 1 : 0;
+        
         $start_at = $input['start_at'] ?? null;
         $end_at = $input['end_at'] ?? null;
         $total_subjects = $input['total_subjects'] ?? null;
-        $mandatory_subjects = json_encode($input['mandatory_subjects'] ?? []);
-        $optional_subjects = json_encode($input['optional_subjects'] ?? []);
-        $question_ids = $input['question_ids'] ?? null; // Use null to indicate no change if not provided
+        
+        $mandatory_subjects = $input['mandatory_subjects'] ?? [];
+        if (!is_string($mandatory_subjects)) {
+            $mandatory_subjects = json_encode($mandatory_subjects);
+        }
+        
+        $optional_subjects = $input['optional_subjects'] ?? [];
+        if (!is_string($optional_subjects)) {
+            $optional_subjects = json_encode($optional_subjects);
+        }
+        
+        $question_ids = $input['question_ids'] ?? null;
+        if (is_string($question_ids)) {
+            $question_ids = json_decode($question_ids, true);
+        }
 
         $pdo->beginTransaction();
         try {
